@@ -3,6 +3,7 @@ import requests
 from dotenv import load_dotenv
 import logging
 import json
+from typing import List, Dict, Any
 
 # Setup Logger
 logger = logging.getLogger(__name__)
@@ -97,6 +98,9 @@ class TopdeskService:
                     data = response.json()
                     # The knowledgeItems endpoint returns a list under the 'item' key
                     new_items = data.get("item", []) if isinstance(data, dict) else data
+                    # Debug: log available fields in first item
+                    if new_items and len(new_items) > 0:
+                        logger.info(f"Available fields in knowledge item: {list(new_items[0].keys())}")
                     items.extend(new_items)
 
                     if limit is not None and len(items) >= limit:
@@ -115,46 +119,32 @@ class TopdeskService:
                 raise Exception(f"API request failed: {response.status_code} - {response.text}")
         return items
 
-    def load_knowledge_items(
-            self,
-            limit=None,
-            fields="title,description,content,keywords,creationDate,modificationDate,translation.content",
-            query: str = None,
-            page_size=1000,
-            public_only: bool = False,
-    ):
-        """
-        Loads knowledge items from TOPdesk, including specified fields, with pagination.
-
-        Args:
-            limit (int, optional): Maximum number of items. Defaults to None (no limit).
-            fields (str, optional): List of fields to get from server.
-                Defaults to "title,description,content,keywords,creationDate,modificationDate".
-            query (str, optional): An FIQL query to filter the response.
-            page_size (int): The number of item per page. max 1000.
-
-        Returns:
-            list: A list of knowledge items.
-
-        Raises:
-            Exception: If API request fails.
-        """
-        # Ensure visibility field is requested if public_only is true
-        if public_only and "visibility" not in fields:
-            fields = f"{fields},visibility"
-
-        params = {"fields": fields, "page_size": page_size, "start": 0}
-
-        if query:
-            params["query"] = query
-
-        if public_only:
-            public_query = "visibility.publicKnowledgeItem==true"
-            params["query"] = f"{params['query']} and {public_query}" if params.get("query") else public_query
-
-        return self._load_paginated_data(
-            endpoint_path="/services/knowledge-base-v1/knowledgeItems", params=params, limit=limit
-        )
+    def load_knowledge_items(self, limit: int = 10, search_term: str = None, query: str = None, **kwargs) -> List[Dict[str, Any]]:
+        """Haalt knowledge items op uit de Topdesk API."""
+        endpoint = f"{self.base_url}/services/knowledge-base-v1/knowledgeItems"
+        # Let op: De URL kan ook /tas/api/knowledgeItems zijn, afhankelijk van je Topdesk versie.
+        # De log laat zien dat /services/... de juiste is voor jou.
+        
+        headers = self.get_headers()
+        params = {
+            'page_size': limit,
+            'searchTerm': search_term,
+            'query': query,
+            'fields': kwargs.get('fields') # Zorg dat fields ook meegaat
+        }
+        
+        # Verwijder None values uit params zodat ze niet in de URL komen
+        params = {k: v for k, v in params.items() if v is not Bone}
+        
+        response = requests.get(endpoint, headers=headers, params=params)
+        
+        if response.status_code != 200:
+            # Verbeterde error logging
+            error_details = response.text
+            self.logger.error(f"API request to '{endpoint}' failed: {response.status_code} - {error_details}")
+            response.raise_for_status()
+            
+        return response.json()
 
     def load_modification_date(
             self, limit=None, fields="creationDate,modificationDate", query: str = None, page_size=1000, public_only: bool = False
@@ -192,7 +182,7 @@ class TopdeskService:
         )
 
     def load_knowledge_item_by_identifier(
-            self, identifier: str, fields: str = "content,title,description,keywords,translation.creationDate,translation.modificationDate"
+            self, identifier: str, fields: str = "content,title,description,keywords,creationDate,modificationDate"
     ):
         """
         Loads a specific knowledge item from TOPdesk based on ID.
@@ -209,13 +199,11 @@ class TopdeskService:
         """
         headers = self.get_headers()
         params = {"fields": fields}
-        # logger.info(f"Requesting knowledge item by identifier '{identifier}' with parameters: {params}")
+        url = f"{self.api_url}/services/knowledge-base-v1/knowledgeItems/{identifier}"
+        logger.info(f"Requesting knowledge item by identifier '{identifier}' with URL: {url} and parameters: {params}")
 
-        response = requests.get(
-            f"{self.api_url}/services/knowledge-base-v1/knowledgeItems/{identifier}",
-            headers=headers,
-            params=params,
-        )
+        response = requests.get(url, headers=headers, params=params)
+        logger.info(f"Response status: {response.status_code}, Response: {response.text[:200]}...")
 
         if response.status_code == 200:
             data = response.json()
@@ -231,6 +219,35 @@ class TopdeskService:
             raise Exception(
                 f"API request failed: {response.status_code} - {response.text}"
             )
+
+    def load_incidents(self, query: str = None, fields: str = None, limit: int = 10, page_size: int = 1000):
+        """
+        Loads incidents from TOPdesk's incident API.
+        
+        Args:
+            query (str, optional): FIQL query to filter incidents
+            fields (str, optional): Comma-separated list of fields to retrieve
+            limit (int): Maximum number of incidents to return
+            page_size (int): Number of items per page for pagination
+            
+        Returns:
+            list: A list of incidents matching the criteria
+            
+        Raises:
+            Exception: If API request fails
+        """
+        params = {"page_size": page_size, "start": 0}
+        
+        if query:
+            params["query"] = query
+        if fields:
+            params["fields"] = fields
+            
+        return self._load_paginated_data(
+            endpoint_path="/tas/api/incidents",
+            params=params,
+            limit=limit
+        )
 
 
 # ONLY FOR FAST TESTING
