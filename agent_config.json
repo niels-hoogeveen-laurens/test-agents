@@ -1,0 +1,34 @@
+{
+  "name": "TopdeskAgent",
+  "description": "Een agent die data ophaalt van Topdesk Knowledge Base voor artikelen, procedures en documentatie",
+  "version": "1.0.0",
+  "entry_point": "json_agent/root_agent.py",
+  "handler_class": "AgentSpaceHandler",
+  "capabilities": [
+    "knowledge_base_retrieval",
+    "topdesk_integration",
+    "content_search",
+    "documentation_access"
+  ],
+  "api_endpoints": {
+    "base_url": "{{topdesk-api-url}}",
+    "endpoints": [
+      "/services/knowledge-base-v1/knowledgeItems",
+      "/services/knowledge-base-v1/knowledgeItems/{identifier}",
+      "/tas/api/login/operator"
+    ]
+  },
+  "environment_variables": {
+    "topdesk-key": "Topdesk API key voor authenticatie",
+    "topdesk-api-url": "Base URL voor Topdesk API"
+  },
+  "sample_queries": [
+    "Laat me de laatste knowledge items zien",
+    "Zoek naar artikelen over wachtwoord reset",
+    "Geef me publieke knowledge items",
+    "Toon concept artikelen",
+    "Haal knowledge item met ID 123 op",
+    "Wat zijn de recente wijzigingen?",
+    "Geef me een overzicht van de knowledge base"
+  ]
+}
